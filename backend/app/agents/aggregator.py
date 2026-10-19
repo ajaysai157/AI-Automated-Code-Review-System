@@ -1,11 +1,6 @@
-from app.models import Finding
-
 def _normalize_message(message: str) -> set[str]:
     """
     Convert a finding message into a small set of meaningful words.
-
-    This helps recognize that baseline and AI messages describing
-    the same vulnerability may use different wording.
     """
 
     stop_words = {
@@ -44,17 +39,17 @@ def _normalize_message(message: str) -> set[str]:
     return words
 
 
-def _same_vulnerability(first: Finding, second: Finding) -> bool:
+def _same_vulnerability(first: dict, second: dict) -> bool:
     """
     Determine whether two findings represent the same vulnerability.
     """
 
     # Different files cannot represent the same vulnerability.
-    if first.filePath != second.filePath:
+    if first["file_path"] != second["file_path"]:
         return False
 
-    first_words = _normalize_message(first.message)
-    second_words = _normalize_message(second.message)
+    first_words = _normalize_message(first["message"])
+    second_words = _normalize_message(second["message"])
 
     if not first_words or not second_words:
         return False
@@ -62,18 +57,14 @@ def _same_vulnerability(first: Finding, second: Finding) -> bool:
     overlap = first_words & second_words
 
     # Strong message similarity.
-    #
-    # This is important because different agents may identify
-    # the same vulnerability at slightly different line numbers.
     if len(overlap) >= 2:
         return True
 
-    # If both agents point to exactly the same line,
-    # allow a weaker message overlap.
+    # Same line + weaker message similarity.
     if (
-        first.line is not None
-        and second.line is not None
-        and first.line == second.line
+        first["line"] is not None
+        and second["line"] is not None
+        and first["line"] == second["line"]
         and len(overlap) >= 1
     ):
         return True
@@ -81,16 +72,12 @@ def _same_vulnerability(first: Finding, second: Finding) -> bool:
     return False
 
 
-def aggregate_findings(findings: list[Finding]) -> list[Finding]:
+def aggregate_findings(findings: list[dict]) -> list[dict]:
     """
     Merge duplicate findings produced by different review agents.
-
-    Baseline and AI may report the same vulnerability with different
-    wording. Keep the highest-confidence finding while preserving
-    genuinely different vulnerabilities.
     """
 
-    unique_findings: list[Finding] = []
+    unique_findings = []
 
     for finding in findings:
         duplicate_index = None
@@ -107,7 +94,7 @@ def aggregate_findings(findings: list[Finding]) -> list[Finding]:
         existing = unique_findings[duplicate_index]
 
         # Prefer the higher-confidence finding.
-        if finding.confidence > existing.confidence:
+        if finding["confidence"] > existing["confidence"]:
             unique_findings[duplicate_index] = finding
 
     return unique_findings
